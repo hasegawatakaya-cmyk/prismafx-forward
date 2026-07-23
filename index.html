@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' data:;">
+<title>PrismaFX フォワード成績 — PrismaFX（デモ検証）</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #eceef1; --panel: #ffffff; --border: #d5dae0;
+    --head-bg: #f5f7fa; --head-bd: #dde2e8;
+    --text: #333a42; --muted: #8a929c; --sub: #5b636c;
+    --green: #3f9142; --red: #cf3b3b; --link: #2f6fb0;
+    --bar-green: #6aa84f; --bar-red: #d76a6a; --line: #cf4a3f;
+    --row-alt: #f7f9fb;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+         font-size: 13px; line-height: 1.5; }
+  a { color: var(--link); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 18px 14px 60px; }
+  .acct { background: var(--panel); border: 1px solid var(--border); border-radius: 3px;
+          padding: 14px 18px; margin-bottom: 14px; }
+  .acct h1 { margin: 0 0 4px; font-size: 20px; font-weight: 600; display: flex;
+             align-items: baseline; flex-wrap: wrap; gap: 6px; }
+  .acct .m { color: var(--sub); font-size: 12px; overflow-wrap: break-word; }
+  .acct .m b { color: var(--text); }
+  .badge { display: inline-block; background: #eef4ec; color: var(--green);
+           border: 1px solid #cfe3c9; border-radius: 3px; padding: 1px 7px;
+           font-size: 11px; font-weight: 600; margin-left: 6px; }
+  .panel { background: var(--panel); border: 1px solid var(--border);
+           border-radius: 3px; margin-bottom: 14px; }
+  .panel > h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--text);
+                background: var(--head-bg); border-bottom: 1px solid var(--head-bd);
+                padding: 8px 14px; border-radius: 3px 3px 0 0; }
+  .panel > h2 .accent { color: var(--link); }
+  .body { padding: 14px; }
+  .top { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 0; }
+  @media (max-width: 760px) { .top { grid-template-columns: minmax(0, 1fr); } }
+  .info { border-right: 1px solid var(--border); min-width: 0; }
+  @media (max-width: 760px) { .info { border-right: none; border-bottom: 1px solid var(--border); } }
+  .info dl { margin: 0; padding: 6px 0; }
+  .info .row { display: flex; justify-content: space-between; padding: 6px 14px; gap: 8px; }
+  .info .row:nth-child(odd) { background: var(--row-alt); }
+  .info .row .k { color: var(--sub); }
+  .info .row .v { font-weight: 600; text-align: right; }
+  .chart-wrap { padding: 12px 14px; position: relative; min-width: 0; }
+  .chart-wrap canvas, .body canvas { max-width: 100%; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid #edf0f3; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { background: var(--head-bg); color: var(--sub); font-weight: 600;
+             border-bottom: 1px solid var(--head-bd); }
+  tbody tr:nth-child(even) { background: var(--row-alt); }
+  .stats { width: 100%; border-collapse: collapse; }
+  .stats td { padding: 7px 12px; border-bottom: 1px solid #edf0f3; }
+  .stats td.k { color: var(--sub); width: 25%; }
+  .stats td.v { font-weight: 600; width: 25%; text-align: right; }
+  .pos { color: var(--green); } .neg { color: var(--red); }
+  .ea-head { display: flex; align-items: baseline; gap: 10px; }
+  .ea-head .nm { font-size: 14px; font-weight: 600; }
+  .ea-head .rng { color: var(--muted); font-size: 11px; }
+  .ea-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+             gap: 14px; margin-top: 10px; }
+  @media (max-width: 760px) { .ea-grid { grid-template-columns: minmax(0, 1fr); } }
+  .ea-grid canvas { max-width: 100%; }
+  .ea-mini td { padding: 5px 10px; }
+  .ea-mini td.k { width: 55%; white-space: nowrap; }
+  .ea-mini td.v { width: 45%; }
+  .empty { color: var(--muted); font-style: italic; padding: 6px 0; }
+  .notice { font-size: 11.5px; color: var(--sub); background: #fdfaf0;
+            border: 1px solid #efe6c9; border-radius: 3px;
+            padding: 9px 12px; margin-bottom: 14px; }
+  footer { margin-top: 22px; color: var(--muted); font-size: 11px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="acct">
+    <h1><span id="pf-name"></span> <span class="badge">pips基準 / デモ検証</span></h1>
+    <div class="m">対象期間: <b id="period"></b> ／ 最終更新: <b id="updated"></b></div>
+  </div>
+
+  <div class="notice">
+    ⚠️ 本ページは <b>デモ口座</b> でのフォワード検証記録を pips基準（ロット・資金額に依存しない指標）で集計したものです。
+    表示内容は<b>過去の実績</b>であり、将来の成果を保証するものではありません。投資判断はご自身の責任で行ってください。
+  </div>
+
+  <div class="panel">
+    <h2>情報 <span class="accent">/ 資産曲線（累積pips）</span></h2>
+    <div class="top">
+      <div class="info" id="info-list"></div>
+      <div class="chart-wrap"><canvas id="pfEquity" height="150"></canvas></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>ピリオド</h2>
+    <table id="periodsTable">
+      <thead><tr><th>期間</th><th>pips</th><th>勝率</th><th>取引数</th><th>ロット</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>高度な統計</h2>
+    <table class="stats" id="advStats"><tbody></tbody></table>
+  </div>
+
+  <div class="panel">
+    <h2>月々の分析（pips）</h2>
+    <div class="body"><canvas id="pfMonthlyPips" height="120"></canvas></div>
+  </div>
+
+  <div class="panel">
+    <h2>システム別（EA別）</h2>
+    <div class="body" id="ea-sections"></div>
+  </div>
+
+  <div class="panel">
+    <h2>過去の取引（直近）</h2>
+    <table id="tradesTable">
+      <thead><tr><th>開始日</th><th>締切日</th><th>シンボル</th><th>アクション</th><th>ロット</th><th>ピップス</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <footer>PrismaFX Lab — フォワード検証（デモ口座） / ⚠️ 投資判断は自己責任で</footer>
+</div>
+
+<script id="report-data" type="application/json">{"portfolio_name": "PrismaFX（デモ検証）", "start_date": "2026-07-23", "generated_at": "2026-07-23 15:02", "show_magic": false, "portfolio": {"summary": {"total_pips": 0.0, "total_trades": 0, "win_rate": null, "profit_factor": null, "avg_win_pips": null, "avg_loss_pips": null, "max_win_streak": 0, "max_loss_streak": 0}, "drawdown": {"max_dd_pips": 0.0}, "long_short": {"long": {"count": 0, "wins": 0, "win_rate": null}, "short": {"count": 0, "wins": 0, "win_rate": null}}, "periods": {"today": {"pips": 0.0, "trades": 0, "win_rate": null, "lots": 0.0}, "week": {"pips": 0.0, "trades": 0, "win_rate": null, "lots": 0.0}, "month": {"pips": 0.0, "trades": 0, "win_rate": null, "lots": 0.0}, "year": {"pips": 0.0, "trades": 0, "win_rate": null, "lots": 0.0}}, "monthly": [], "equity_curve": [], "recent_trades": [], "date_range": {"start": null, "end": null}, "trade_count": 0}, "eas": [{"summary": {"total_pips": 0.0, "total_trades": 0, "win_rate": null, "profit_factor": null, "avg_win_pips": null, "avg_loss_pips": null, "max_win_streak": 0, "max_loss_streak": 0}, "drawdown": {"max_dd_pips": 0.0}, "equity_curve": [], "monthly": [], "date_range": {"start": null, "end": null}, "trade_count": 0, "alias": "UJ (USDJPY M15)", "magic": null}, {"summary": {"total_pips": 0.0, "total_trades": 0, "win_rate": null, "profit_factor": null, "avg_win_pips": null, "avg_loss_pips": null, "max_win_streak": 0, "max_loss_streak": 0}, "drawdown": {"max_dd_pips": 0.0}, "equity_curve": [], "monthly": [], "date_range": {"start": null, "end": null}, "trade_count": 0, "alias": "GJ (GBPJPY M15)", "magic": null}, {"summary": {"total_pips": 0.0, "total_trades": 0, "win_rate": null, "profit_factor": null, "avg_win_pips": null, "avg_loss_pips": null, "max_win_streak": 0, "max_loss_streak": 0}, "drawdown": {"max_dd_pips": 0.0}, "equity_curve": [], "monthly": [], "date_range": {"start": null, "end": null}, "trade_count": 0, "alias": "EU (EURUSD M15)", "magic": null}]}</script>
+<script>
+const DATA = JSON.parse(document.getElementById('report-data').textContent);
+const pip = v => (v == null) ? '—' : (v >= 0 ? '+' : '') + v.toFixed(1);
+const pct = v => (v == null) ? '—' : v.toFixed(1) + '%';
+const num = v => (v == null) ? '—' : v.toFixed(2);
+const cls = v => (v == null) ? '' : (v >= 0 ? 'pos' : 'neg');
+const esc = s => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+Chart.defaults.color = '#6b727b';
+Chart.defaults.borderColor = '#e6eaee';
+Chart.defaults.font.size = 11;
+const barColors = arr => arr.map(v => v >= 0 ? '#6aa84f' : '#d76a6a');
+
+function equityChart(canvas, curve) {
+  new Chart(canvas, {
+    type: 'line',
+    data: { labels: curve.map(p => p.t),
+      datasets: [{ data: curve.map(p => p.equity), borderColor: '#cf4a3f',
+        backgroundColor: 'rgba(207,74,63,0.07)', fill: true, tension: 0.12,
+        pointRadius: 0, borderWidth: 1.6 }] },
+    options: { plugins: { legend: { display: false } },
+      scales: { x: { ticks: { maxTicksLimit: 8 }, grid: { display: false } },
+                y: { grid: { color: '#eef1f4' } } } }
+  });
+}
+function pipsBar(canvas, monthly, title) {
+  const vals = monthly.map(m => m.pips);
+  new Chart(canvas, {
+    type: 'bar',
+    data: { labels: monthly.map(m => m.month),
+      datasets: [{ data: vals, backgroundColor: barColors(vals) }] },
+    options: { plugins: { legend: { display: false },
+        title: { display: !!title, text: title, color: '#8a929c' } },
+      scales: { x: { ticks: { maxTicksLimit: 8, autoSkip: true }, grid: { display: false } },
+                y: { grid: { color: '#eef1f4' } } } }
+  });
+}
+
+document.getElementById('pf-name').textContent = DATA.portfolio_name;
+document.getElementById('period').textContent = DATA.start_date + ' 〜 現在';
+document.getElementById('updated').textContent = DATA.generated_at;
+
+const P = DATA.portfolio, s = P.summary, dd = P.drawdown, ls = P.long_short, dr = P.date_range;
+
+const info = [
+  ['総獲得pips', pip(s.total_pips), cls(s.total_pips)],
+  ['勝率', pct(s.win_rate), ''],
+  ['プロフィットファクター', num(s.profit_factor), ''],
+  ['最大ドローダウン', pip(-dd.max_dd_pips) + ' pips', 'neg'],
+  ['総トレード数', s.total_trades + '件', ''],
+  ['ロング / ショート勝率', pct(ls.long.win_rate) + ' / ' + pct(ls.short.win_rate), ''],
+  ['対象期間', (dr.start || '—') + '〜' + (dr.end || ''), ''],
+];
+document.getElementById('info-list').innerHTML = info.map(([k, v, c]) =>
+  `<div class="row"><span class="k">${k}</span><span class="v ${c}">${v}</span></div>`).join('');
+
+const PR = P.periods;
+document.querySelector('#periodsTable tbody').innerHTML =
+  [['今日','today'],['今週','week'],['今月','month'],['今年','year']].map(([lab, k]) => {
+    const p = PR[k];
+    return `<tr><td>${lab}</td><td class="${cls(p.pips)}">${pip(p.pips)}</td>` +
+           `<td>${pct(p.win_rate)}</td><td>${p.trades}</td><td>${p.lots.toFixed(2)}</td></tr>`;
+  }).join('');
+
+const pairs = [
+  ['総トレード数', s.total_trades + '件'], ['総獲得pips', pip(s.total_pips)],
+  ['勝率', pct(s.win_rate)], ['プロフィットファクター', num(s.profit_factor)],
+  ['平均利益 (pips)', pip(s.avg_win_pips)], ['平均損失 (pips)', pip(s.avg_loss_pips)],
+  ['最大連勝', s.max_win_streak + '回'], ['最大連敗', s.max_loss_streak + '回'],
+  ['ロング勝率', pct(ls.long.win_rate) + ' (' + ls.long.count + ')'],
+  ['ショート勝率', pct(ls.short.win_rate) + ' (' + ls.short.count + ')'],
+  ['最大ドローダウン', pip(-dd.max_dd_pips) + ' pips'], ['対象期間', (dr.start||'—') + '〜' + (dr.end||'')],
+];
+let rows = '';
+for (let i = 0; i < pairs.length; i += 2) {
+  const a = pairs[i], b = pairs[i + 1] || ['', ''];
+  rows += `<tr><td class="k">${a[0]}</td><td class="v">${a[1]}</td>` +
+          `<td class="k">${b[0]}</td><td class="v">${b[1]}</td></tr>`;
+}
+document.querySelector('#advStats tbody').innerHTML = rows;
+
+document.querySelector('#tradesTable tbody').innerHTML = P.recent_trades.map(t =>
+  `<tr><td>${esc(t.open_time)}</td><td>${esc(t.close_time)}</td><td>${esc(t.symbol)}</td>` +
+  `<td>${t.type === 'buy' ? '買い' : '売り'}</td><td>${Number(t.lots).toFixed(2)}</td>` +
+  `<td class="${cls(t.pips)}">${pip(t.pips)}</td></tr>`).join('');
+
+equityChart(document.getElementById('pfEquity'), P.equity_curve);
+pipsBar(document.getElementById('pfMonthlyPips'), P.monthly, '');
+
+const container = document.getElementById('ea-sections');
+DATA.eas.forEach((ea, i) => {
+  const div = document.createElement('div');
+  div.style.cssText = 'border-top:1px solid #edf0f3;padding-top:14px;margin-top:14px;';
+  if (i === 0) div.style.cssText = '';
+  const magicLabel = ea.magic != null ? ` <span class="rng">Magic: ${esc(ea.magic)}</span>` : '';
+  if (!ea.trade_count) {
+    div.innerHTML = `<div class="ea-head"><span class="nm">${esc(ea.alias)}</span>${magicLabel}</div>` +
+                    `<div class="empty">取引なし（稼働直後）</div>`;
+    container.appendChild(div);
+    return;
+  }
+  const es = ea.summary, edd = ea.drawdown, edr = ea.date_range;
+  const mini = [
+    ['獲得pips', pip(es.total_pips), cls(es.total_pips)],
+    ['勝率', pct(es.win_rate), ''], ['PF', num(es.profit_factor), ''],
+    ['最大DD', pip(-edd.max_dd_pips), 'neg'], ['取引数', ea.trade_count + '件', ''],
+  ];
+  const miniRows = mini.map(([k, v, c]) =>
+    `<tr><td class="k">${k}</td><td class="v ${c}" style="text-align:right">${v}</td></tr>`).join('');
+  div.innerHTML =
+    `<div class="ea-head"><span class="nm">${esc(ea.alias)}</span>` +
+    `<span class="rng">${edr.start}〜${edr.end}</span>${magicLabel}</div>` +
+    `<div class="ea-grid">` +
+      `<table class="stats ea-mini"><tbody>${miniRows}</tbody></table>` +
+      `<canvas id="eaEq${i}" height="120"></canvas>` +
+    `</div>` +
+    `<div style="margin-top:10px"><canvas id="eaMo${i}" height="90"></canvas></div>`;
+  container.appendChild(div);
+  equityChart(document.getElementById('eaEq' + i), ea.equity_curve);
+  pipsBar(document.getElementById('eaMo' + i), ea.monthly, '月次 (pips)');
+});
+</script>
+</body>
+</html>
