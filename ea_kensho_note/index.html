@@ -1,0 +1,864 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>EA検証ノート</title>
+<meta name="description" content="デモ口座でのEA検証を、週次記録とロット計算で支える読者向けツール。">
+<meta name="theme-color" content="#F0A93B">
+<meta name="color-scheme" content="light dark">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/icon-16.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="EA検証ノート">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  img{max-width:100%;}
+  [hidden]{display:none!important;}
+
+  :root{
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+    --bg:#F5F1E6;
+    --surface:#FFFFFF;
+    --surface-2:#F2ECDB;
+    --ink:#1C1F26;
+    --muted:#7C7768;
+    --gold:#F0A93B;
+    --gold-deep:#D98A1F;
+    --gold-ink:#1C1F26;
+    --gold-soft:#FBE8C4;
+    --win:#3B72E0;
+    --loss:#E2483F;
+    --border:#E7DEC7;
+    --overlay:rgba(20,16,8,.55);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#111318;
+      --surface:#191C22;
+      --surface-2:#20242C;
+      --ink:#F3F1E9;
+      --muted:#9C9A8E;
+      --gold:#F3B451;
+      --gold-deep:#C98A2C;
+      --gold-ink:#14171C;
+      --gold-soft:#33270F;
+      --win:#6C9CF5;
+      --loss:#F07971;
+      --border:#2A2E36;
+      --overlay:rgba(0,0,0,.65);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#111318;
+    --surface:#191C22;
+    --surface-2:#20242C;
+    --ink:#F3F1E9;
+    --muted:#9C9A8E;
+    --gold:#F3B451;
+    --gold-deep:#C98A2C;
+    --gold-ink:#14171C;
+    --gold-soft:#33270F;
+    --win:#6C9CF5;
+    --loss:#F07971;
+    --border:#2A2E36;
+    --overlay:rgba(0,0,0,.65);
+  }
+
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Zen Kaku Gothic New",-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;
+    font-size:14px;
+    padding:0 16px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:"JetBrains Mono","SF Mono",Consolas,monospace;font-variant-numeric:tabular-nums;}
+
+  .page{max-width:760px;margin:0 auto;padding-block:0 40px;display:flex;flex-direction:column;gap:18px;}
+
+  .app-header{
+    margin:0 -16px 4px;padding:20px 16px 18px;
+    background:linear-gradient(135deg,var(--gold),var(--gold-deep));
+    color:var(--gold-ink);border-radius:0 0 24px 24px;
+    display:flex;flex-direction:column;gap:10px;
+  }
+  .app-header h1{font-size:22px;font-weight:900;margin:0;letter-spacing:.01em;}
+  .app-header .lede{margin:0;font-size:12.5px;line-height:1.6;opacity:.82;}
+
+  .tabs{
+    position:sticky;top:env(safe-area-inset-top,0px);z-index:20;
+    display:flex;gap:6px;background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;padding:4px;box-shadow:0 6px 18px rgba(20,16,8,.08);
+  }
+  .tab{
+    flex:1;appearance:none;border:none;background:none;cursor:pointer;
+    font-family:inherit;font-size:13.5px;font-weight:700;color:var(--muted);
+    padding:9px 4px;border-radius:9px;
+  }
+  .tab.active{color:var(--gold-ink);background:var(--gold);}
+  .tab:focus-visible{outline:2px solid var(--gold-deep);outline-offset:2px;}
+
+  .panel{display:flex;flex-direction:column;gap:16px;}
+
+  .banner{
+    background:var(--gold-soft);color:var(--ink);
+    border-radius:10px;padding:10px 14px;font-size:12.5px;line-height:1.6;
+  }
+  .note-line{color:var(--muted);font-size:12px;line-height:1.6;}
+
+  .hero{
+    background:var(--surface);border:1px solid var(--border);border-radius:18px;
+    padding:18px;display:flex;flex-direction:column;gap:14px;
+    box-shadow:0 10px 24px rgba(20,16,8,.06);
+  }
+  .hero-top{display:flex;justify-content:space-between;align-items:baseline;}
+  .hero-top .label{font-size:12.5px;font-weight:700;color:var(--muted);}
+  .hero-top .sub{font-size:11.5px;color:var(--muted);}
+  .hero-num{font-size:34px;font-weight:900;}
+  .hero-num.win{color:var(--win);}
+  .hero-num.loss{color:var(--loss);}
+
+  .dual{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .dual-col{background:var(--surface-2);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;}
+  .dual-col .dual-head{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;}
+  .dot{width:8px;height:8px;border-radius:50%;flex:none;}
+  .dot.win{background:var(--win);}
+  .dot.loss{background:var(--loss);}
+  .dual-row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);}
+  .dual-row span.v{color:var(--ink);font-weight:700;}
+  .dual-col.win .dual-row span.v{color:var(--win);}
+  .dual-col.loss .dual-row span.v{color:var(--loss);}
+
+  .chips{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+  .chip{background:var(--surface-2);border-radius:10px;padding:10px 8px;text-align:center;display:flex;flex-direction:column;gap:4px;}
+  .chip .chip-label{font-size:10.5px;color:var(--muted);}
+  .chip .chip-val{font-size:15px;font-weight:700;}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px;}
+  .card h2{font-size:14.5px;font-weight:700;margin:0 0 3px;}
+  .card .card-sub{font-size:12px;color:var(--muted);margin:0 0 12px;}
+
+  .chart-row{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:center;}
+  .chart-empty{font-size:13px;color:var(--muted);padding:14px 0;text-align:center;grid-column:1 / -1;}
+  svg.chart{width:100%;height:auto;display:block;}
+  .chart text{fill:var(--muted);font-size:9px;font-family:"JetBrains Mono",monospace;}
+  .chart .zero-line{stroke:var(--border);stroke-width:1;}
+
+  .donut-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;}
+  .donut{
+    width:118px;height:118px;border-radius:50%;position:relative;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .donut::after{
+    content:"";position:absolute;inset:14px;border-radius:50%;background:var(--surface);
+  }
+  .donut-center{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;}
+  .donut-center .pct{font-size:19px;font-weight:900;font-family:"JetBrains Mono",monospace;}
+  .donut-center .cap{font-size:9.5px;color:var(--muted);}
+  .donut-legend{display:flex;gap:14px;font-size:11.5px;color:var(--muted);}
+  .donut-legend span.v{color:var(--ink);font-weight:700;}
+
+  @media (max-width:560px){
+    .chart-row{grid-template-columns:1fr;}
+  }
+
+  .list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;}
+  .li{
+    display:flex;gap:12px;background:var(--surface-2);border-radius:12px;padding:12px 14px;
+    border-left:4px solid var(--border);
+  }
+  .li.is-win{border-left-color:var(--win);}
+  .li.is-loss{border-left-color:var(--loss);}
+  .li-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;}
+  .li-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+  .li-week{font-size:13px;font-weight:700;}
+  .li-pnl{font-size:16px;font-weight:700;}
+  .li-pnl.win{color:var(--win);}
+  .li-pnl.loss{color:var(--loss);}
+  .li-meta{font-size:11.5px;color:var(--muted);}
+  .li-note{font-size:12px;color:var(--muted);line-height:1.5;}
+  .badge-sample{
+    display:inline-block;font-size:9.5px;font-weight:700;color:var(--gold-deep);
+    background:var(--gold-soft);border-radius:5px;padding:2px 6px;margin-left:6px;
+  }
+  .li-actions{flex:none;display:flex;flex-direction:column;gap:6px;justify-content:center;}
+  .li-actions button{
+    appearance:none;border:none;background:none;cursor:pointer;color:var(--muted);
+    font-family:inherit;font-size:11px;font-weight:700;padding:2px 0;text-align:right;
+  }
+  .li-actions button.danger{color:var(--loss);}
+  .li-actions button:hover{color:var(--gold-deep);}
+  .li-actions button.danger:hover{color:var(--loss);}
+  .list-empty{font-size:13px;color:var(--muted);text-align:center;padding:20px 0;}
+
+  .fab{
+    position:fixed;right:20px;bottom:calc(20px + env(safe-area-inset-bottom,0px));
+    width:56px;height:56px;border-radius:50%;background:var(--gold);color:var(--gold-ink);
+    border:none;font-size:26px;line-height:1;display:flex;align-items:center;justify-content:center;
+    box-shadow:0 10px 22px rgba(20,16,8,.3);cursor:pointer;z-index:40;
+  }
+  .fab:focus-visible{outline:2px solid var(--ink);outline-offset:3px;}
+
+  .modal-overlay{
+    position:fixed;inset:0;background:var(--overlay);z-index:50;
+    display:flex;align-items:flex-end;justify-content:center;padding:0;
+  }
+  @media (min-width:640px){ .modal-overlay{align-items:center;padding:20px;} }
+  .modal-card{
+    background:var(--surface);width:100%;max-width:480px;max-height:88vh;overflow-y:auto;
+    border-radius:20px 20px 0 0;padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));
+    box-shadow:0 -10px 30px rgba(0,0,0,.25);
+  }
+  @media (min-width:640px){ .modal-card{border-radius:18px;} }
+  .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+  .modal-head h2{font-size:15px;font-weight:700;margin:0;}
+  .modal-close{
+    appearance:none;border:none;background:var(--surface-2);border-radius:50%;
+    width:30px;height:30px;font-size:15px;cursor:pointer;color:var(--ink);
+  }
+
+  form.record-form{display:flex;flex-direction:column;gap:14px;}
+  .field{display:flex;flex-direction:column;gap:6px;}
+  .field label{font-size:12px;font-weight:700;color:var(--muted);}
+  .field input,.field select,.field textarea{
+    font-family:inherit;font-size:14px;color:var(--ink);
+    background:var(--surface-2);border:1px solid var(--border);border-radius:9px;
+    padding:9px 10px;width:100%;
+  }
+  .field input.mono{font-family:"JetBrains Mono",monospace;}
+  .field textarea{resize:vertical;min-height:64px;line-height:1.6;}
+  .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--gold-deep);outline-offset:1px;}
+
+  .form-actions{display:flex;gap:10px;align-items:center;}
+  button.primary{
+    appearance:none;border:none;border-radius:10px;cursor:pointer;
+    background:var(--gold);color:var(--gold-ink);font-family:inherit;
+    font-size:14px;font-weight:700;padding:11px 18px;flex:1;
+  }
+  button.primary:focus-visible{outline:2px solid var(--ink);outline-offset:2px;}
+  button.ghost{
+    appearance:none;border:1px solid var(--border);border-radius:10px;cursor:pointer;
+    background:transparent;color:var(--muted);font-family:inherit;font-size:13px;
+    padding:10px 14px;
+  }
+
+  .lot-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start;}
+  .lot-form{display:flex;flex-direction:column;gap:14px;}
+  .lot-result{
+    background:var(--gold-soft);border-radius:16px;padding:20px;
+    display:flex;flex-direction:column;gap:10px;align-items:flex-start;
+  }
+  .lot-result .label{font-size:12px;color:var(--muted);font-weight:700;}
+  .lot-result .big{font-size:40px;font-weight:900;line-height:1;color:var(--ink);}
+  .lot-result .ratio{font-size:12.5px;color:var(--muted);}
+  .lot-result .warn{
+    font-size:12px;color:var(--loss);background:var(--surface);
+    border-radius:8px;padding:8px 10px;line-height:1.6;
+  }
+
+  .steps{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:10px;}
+  .steps li{display:flex;gap:10px;font-size:13px;line-height:1.6;}
+  .steps .n{
+    flex:none;width:20px;height:20px;border-radius:50%;background:var(--gold-soft);
+    color:var(--gold-deep);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;
+    font-family:"JetBrains Mono",monospace;
+  }
+
+  footer.disclaimer{
+    font-size:11.5px;color:var(--muted);line-height:1.7;border-top:1px solid var(--border);
+    padding-top:16px;
+  }
+
+  @media (max-width:620px){
+    .stats{grid-template-columns:1fr 1fr;}
+    .lot-grid{grid-template-columns:1fr;}
+    .dual{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="app-header">
+    <h1>EA検証ノート</h1>
+    <p class="lede">デモ口座でのEA検証を、週次記録とロット計算で支えるツールです。「チェック3：記録をつける」「ロットの逆算」の実践用に。</p>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="record" role="tab" aria-selected="true">週次記録</button>
+    <button class="tab" data-tab="lot" role="tab" aria-selected="false">ロット計算</button>
+  </nav>
+
+  <section id="panel-record" class="panel" role="tabpanel">
+    <div id="sampleBanner" class="banner" hidden>
+      以下はサンプル表示です。記録を保存すると、あなたの記録に切り替わります。
+    </div>
+
+    <div class="hero">
+      <div class="hero-top">
+        <span class="label">収支合計（記録期間）</span>
+        <span class="sub" id="heroWeeks">0週分</span>
+      </div>
+      <span class="hero-num" id="heroTotal">—</span>
+
+      <div class="dual">
+        <div class="dual-col win">
+          <div class="dual-head"><span class="dot win"></span>勝ち週</div>
+          <div class="dual-row"><span>合計</span><span class="v mono" id="winTotal">—</span></div>
+          <div class="dual-row"><span>最大</span><span class="v mono" id="winMax">—</span></div>
+          <div class="dual-row"><span>平均</span><span class="v mono" id="winAvg">—</span></div>
+          <div class="dual-row"><span>中央値</span><span class="v mono" id="winMed">—</span></div>
+        </div>
+        <div class="dual-col loss">
+          <div class="dual-head"><span class="dot loss"></span>負け週</div>
+          <div class="dual-row"><span>合計</span><span class="v mono" id="lossTotal">—</span></div>
+          <div class="dual-row"><span>最大</span><span class="v mono" id="lossMax">—</span></div>
+          <div class="dual-row"><span>平均</span><span class="v mono" id="lossAvg">—</span></div>
+          <div class="dual-row"><span>中央値</span><span class="v mono" id="lossMed">—</span></div>
+        </div>
+      </div>
+
+      <div class="chips">
+        <div class="chip"><span class="chip-label">勝率</span><span class="chip-val mono" id="chipWinRate">—</span></div>
+        <div class="chip"><span class="chip-label">記録週数</span><span class="chip-val mono" id="chipWeeks">0</span></div>
+        <div class="chip"><span class="chip-label">平均DD</span><span class="chip-val mono" id="chipAvgDd">—</span></div>
+        <div class="chip"><span class="chip-label">最大DD</span><span class="chip-val mono" id="chipMaxDd">—</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>週次損益の推移と勝敗内訳</h2>
+      <p class="card-sub">記録した週の損益を時系列で、勝ち週と負け週の比率をドーナツで表示します。</p>
+      <div class="chart-row" id="chartRow">
+        <div id="chartWrap"></div>
+        <div class="donut-wrap" id="donutWrap"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>記録一覧</h2>
+      <ul class="list" id="recordList"></ul>
+    </div>
+  </section>
+
+  <section id="panel-lot" class="panel" role="tabpanel" hidden>
+    <div class="card">
+      <h2>ロット計算（最大DD逆算法）</h2>
+      <p class="card-sub">バックテストの「資金とロットの比率」から、自分の資金に合わせた参考ロットを計算します。</p>
+
+      <div class="lot-grid">
+        <div class="lot-form">
+          <div class="field">
+            <label for="lBacktestCapital">検証時の初期資金（円）</label>
+            <input type="number" id="lBacktestCapital" class="mono" min="1" step="1000">
+          </div>
+          <div class="field">
+            <label for="lBacktestLot">検証時のロット</label>
+            <input type="number" id="lBacktestLot" class="mono" min="0.01" step="0.01">
+          </div>
+          <div class="field">
+            <label for="lBacktestDd">検証時の最大DD（％・任意）</label>
+            <input type="number" id="lBacktestDd" class="mono" min="0" max="100" step="0.1">
+          </div>
+          <div class="field">
+            <label for="lMyCapital">自分の資金（円）</label>
+            <input type="number" id="lMyCapital" class="mono" min="1" step="1000">
+          </div>
+          <p class="note-line">初期値には記事中の架空の例が入っています。自分の数値に書き換えてください。</p>
+        </div>
+
+        <div class="lot-result" id="lotResult">
+          <span class="label">参考ロット</span>
+          <span class="big mono" id="lotBig">—</span>
+          <span class="ratio mono" id="lotRatio"></span>
+          <div class="warn" id="lotWarn" hidden></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>段階的に増やす目安</h2>
+      <ol class="steps">
+        <li><span class="n">1</span>デモ口座で、最小ロット（0.01）から動かして動作を確認する</li>
+        <li><span class="n">2</span>本番口座でも、最小ロットから始める</li>
+        <li><span class="n">3</span>1〜2か月の動きを見て、慣れてから、比率を目安に少しずつ調整する</li>
+      </ol>
+    </div>
+
+    <p class="note-line">
+      これは検証条件からの単純な比例計算です。実際は、ブローカーの最小ロットや刻みによる丸め、必要証拠金（レバレッジ）、連敗時にロットを増やすEAの設定などで、この比例は崩れます。最大ドローダウンは将来の上限ではなく、検証期間になかった相場ではより大きく落ち込む可能性があります。
+    </p>
+  </section>
+
+  <footer class="disclaimer">
+    本ツールは記録・計算の補助を目的としたもので、投資助言ではありません。FX（外国為替証拠金取引）には元本を超える損失が生じるリスクがあります。<br>
+    ⚠️ 投資判断は自己責任で
+  </footer>
+
+  <button type="button" class="fab" id="fabAdd" aria-label="記録を追加">＋</button>
+
+  <div class="modal-overlay" id="modalOverlay" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="modalTitle">記録を追加</h2>
+        <button type="button" class="modal-close" id="modalClose" aria-label="閉じる">×</button>
+      </div>
+      <form class="record-form" id="recordForm">
+        <div class="field">
+          <label for="fWeekStart">週の開始日（月曜）</label>
+          <input type="date" id="fWeekStart" required>
+        </div>
+        <div class="field">
+          <label for="fTrades">週の取引数</label>
+          <input type="number" id="fTrades" class="mono" min="0" step="1" required>
+        </div>
+        <div class="field">
+          <label for="fPnl">週の損益（円）</label>
+          <input type="number" id="fPnl" class="mono" step="1" required>
+        </div>
+        <div class="field">
+          <label for="fDd">週内の最大ドローダウン（％）</label>
+          <input type="number" id="fDd" class="mono" min="0" max="100" step="0.1" required>
+        </div>
+        <div class="field">
+          <label for="fNote">気づいたこと（スプレッド拡大、経済指標前後など）</label>
+          <textarea id="fNote" maxlength="300" placeholder="例：指標発表の直前直後にスプレッドが広がり、損切りが普段よりやや大きくなった"></textarea>
+        </div>
+        <p class="note-line">記録はこの端末のブラウザ内にのみ保存されます。端末やブラウザを変えると引き継がれません。</p>
+        <div class="form-actions">
+          <button type="submit" class="primary" id="saveBtn">記録を保存</button>
+          <button type="button" class="ghost" id="cancelEditBtn">閉じる</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var STORAGE_KEY = "ea_kensho_note_records_v1";
+
+  function pad(n){ return String(n).padStart(2,"0"); }
+
+  function mondayOf(d){
+    var day = d.getDay();
+    var diff = (day === 0 ? -6 : 1 - day);
+    var m = new Date(d);
+    m.setDate(d.getDate() + diff);
+    m.setHours(0,0,0,0);
+    return m;
+  }
+
+  function isoDate(d){
+    return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate());
+  }
+
+  function weekLabel(iso){
+    var d = new Date(iso + "T00:00:00");
+    return (d.getMonth()+1) + "/" + d.getDate() + "週";
+  }
+
+  function fmtYen(n){
+    var sign = n > 0 ? "+" : "";
+    return sign + Math.round(n).toLocaleString("ja-JP") + "円";
+  }
+  function fmtYenAbs(n){
+    return Math.round(Math.abs(n)).toLocaleString("ja-JP") + "円";
+  }
+  function fmtPct(n){
+    return n.toFixed(1) + "%";
+  }
+  function median(arr){
+    if(arr.length === 0) return 0;
+    var s = arr.slice().sort(function(a,b){ return a-b; });
+    var mid = Math.floor(s.length/2);
+    return s.length % 2 ? s[mid] : (s[mid-1]+s[mid])/2;
+  }
+
+  function loadState(){
+    var sample = {
+      isSample: true,
+      items: [
+        {id:"s1", weekStart:"2026-09-01", trades:5, pnl:12000, dd:8.5, note:"指標発表前後にスプレッドが広がり、損切りが通常よりやや大きくなった。"},
+        {id:"s2", weekStart:"2026-09-08", trades:3, pnl:-4200, dd:11.2, note:"週後半に連敗が続いたが、設定通りの損切りで想定内の範囲だった。"},
+        {id:"s3", weekStart:"2026-09-15", trades:6, pnl:7800, dd:6.1, note:"目立った崩れはなく、想定どおりの推移。"}
+      ]
+    };
+    try{
+      var raw = window.localStorage.getItem(STORAGE_KEY);
+      if(!raw) return sample;
+      var parsed = JSON.parse(raw);
+      if(!parsed || !Array.isArray(parsed.items)) return sample;
+      return {isSample:false, items: parsed.items};
+    }catch(e){
+      return sample;
+    }
+  }
+
+  function saveState(state){
+    try{
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({items: state.items}));
+    }catch(e){}
+  }
+
+  var state = loadState();
+  var editingId = null;
+
+  var recordForm = document.getElementById("recordForm");
+  var fWeekStart = document.getElementById("fWeekStart");
+  var fTrades = document.getElementById("fTrades");
+  var fPnl = document.getElementById("fPnl");
+  var fDd = document.getElementById("fDd");
+  var fNote = document.getElementById("fNote");
+  var saveBtn = document.getElementById("saveBtn");
+  var cancelEditBtn = document.getElementById("cancelEditBtn");
+  var sampleBanner = document.getElementById("sampleBanner");
+  var recordList = document.getElementById("recordList");
+  var chartWrap = document.getElementById("chartWrap");
+  var donutWrap = document.getElementById("donutWrap");
+  var fabAdd = document.getElementById("fabAdd");
+  var modalOverlay = document.getElementById("modalOverlay");
+  var modalClose = document.getElementById("modalClose");
+  var modalTitle = document.getElementById("modalTitle");
+
+  function sortedAsc(items){
+    return items.slice().sort(function(a,b){ return a.weekStart < b.weekStart ? -1 : 1; });
+  }
+  function sortedDesc(items){
+    return items.slice().sort(function(a,b){ return a.weekStart > b.weekStart ? -1 : 1; });
+  }
+
+  function renderHero(){
+    var items = state.items;
+    var total = items.reduce(function(s,i){ return s + i.pnl; }, 0);
+    document.getElementById("heroTotal").textContent = items.length ? fmtYen(total) : "—";
+    document.getElementById("heroTotal").className = "hero-num " + (total >= 0 ? "win" : "loss");
+    document.getElementById("heroWeeks").textContent = items.length + "週分";
+
+    var wins = items.filter(function(i){ return i.pnl > 0; }).map(function(i){ return i.pnl; });
+    var losses = items.filter(function(i){ return i.pnl < 0; }).map(function(i){ return Math.abs(i.pnl); });
+
+    function fillGroup(prefix, arr){
+      if(arr.length === 0){
+        document.getElementById(prefix+"Total").textContent = "—";
+        document.getElementById(prefix+"Max").textContent = "—";
+        document.getElementById(prefix+"Avg").textContent = "—";
+        document.getElementById(prefix+"Med").textContent = "—";
+        return;
+      }
+      var sum = arr.reduce(function(a,b){ return a+b; }, 0);
+      document.getElementById(prefix+"Total").textContent = fmtYenAbs(sum);
+      document.getElementById(prefix+"Max").textContent = fmtYenAbs(Math.max.apply(null, arr));
+      document.getElementById(prefix+"Avg").textContent = fmtYenAbs(sum/arr.length);
+      document.getElementById(prefix+"Med").textContent = fmtYenAbs(median(arr));
+    }
+    fillGroup("win", wins);
+    fillGroup("loss", losses);
+
+    var winCount = wins.length, lossCount = losses.length, drawCount = items.length - winCount - lossCount;
+    document.getElementById("chipWinRate").textContent = items.length ? Math.round(winCount/items.length*100) + "%" : "—";
+    document.getElementById("chipWeeks").textContent = items.length;
+    if(items.length){
+      var avgDd = items.reduce(function(s,i){ return s+i.dd; },0)/items.length;
+      document.getElementById("chipAvgDd").textContent = fmtPct(avgDd);
+      document.getElementById("chipMaxDd").textContent = fmtPct(Math.max.apply(null, items.map(function(i){ return i.dd; })));
+    } else {
+      document.getElementById("chipAvgDd").textContent = "—";
+      document.getElementById("chipMaxDd").textContent = "—";
+    }
+
+    return {winCount:winCount, lossCount:lossCount, drawCount:drawCount};
+  }
+
+  function renderChart(){
+    var items = sortedAsc(state.items);
+    if(items.length === 0){
+      chartWrap.innerHTML = '<p class="chart-empty">記録が2週分以上たまると、ここに推移が表示されます。</p>';
+      return;
+    }
+    var maxAbs = Math.max(1, Math.max.apply(null, items.map(function(i){ return Math.abs(i.pnl); })));
+    var barW = 26, gap = 14, padL = 34, padR = 8, padTop = 8, halfH = 52, padBottom = 20;
+    var w = padL + padR + items.length * (barW + gap);
+    var h = padTop + halfH * 2 + padBottom;
+    var zeroY = padTop + halfH;
+
+    var svg = '<svg class="chart" viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="週次損益の推移">';
+    svg += '<line class="zero-line" x1="' + padL + '" y1="' + zeroY + '" x2="' + (w - padR) + '" y2="' + zeroY + '"></line>';
+    svg += '<text x="6" y="' + (zeroY + 3) + '">0</text>';
+
+    items.forEach(function(item, idx){
+      var x = padL + idx * (barW + gap);
+      var barH = Math.max(2, (Math.abs(item.pnl) / maxAbs) * (halfH - 6));
+      var y = item.pnl >= 0 ? zeroY - barH : zeroY;
+      var color = item.pnl >= 0 ? "var(--win)" : "var(--loss)";
+      svg += '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + barH + '" rx="3" fill="' + color + '"></rect>';
+      svg += '<text x="' + (x + barW/2) + '" y="' + (h - 5) + '" text-anchor="middle">' + weekLabel(item.weekStart) + '</text>';
+    });
+
+    svg += '</svg>';
+    chartWrap.innerHTML = svg;
+  }
+
+  function renderDonut(counts){
+    var total = counts.winCount + counts.lossCount + counts.drawCount;
+    if(total === 0){
+      donutWrap.innerHTML = '<p class="chart-empty">記録が増えると勝敗の内訳が表示されます。</p>';
+      return;
+    }
+    var winPct = counts.winCount/total*100;
+    var lossPct = counts.lossCount/total*100;
+    var bg = "conic-gradient(var(--win) 0% " + winPct + "%, var(--loss) " + winPct + "% " + (winPct+lossPct) + "%, var(--border) " + (winPct+lossPct) + "% 100%)";
+    donutWrap.innerHTML =
+      '<div class="donut" style="background:' + bg + '">' +
+        '<div class="donut-center"><span class="pct mono">' + Math.round(winPct) + '%</span><span class="cap">勝ち週</span></div>' +
+      '</div>' +
+      '<div class="donut-legend">' +
+        '<span>勝ち <span class="v">' + counts.winCount + '</span></span>' +
+        '<span>負け <span class="v">' + counts.lossCount + '</span></span>' +
+        (counts.drawCount ? '<span>引分 <span class="v">' + counts.drawCount + '</span></span>' : '') +
+      '</div>';
+  }
+
+  function renderList(){
+    var items = sortedDesc(state.items);
+    recordList.innerHTML = "";
+    if(items.length === 0){
+      recordList.innerHTML = '<li class="list-empty">まだ記録がありません。右下の「＋」から追加してください。</li>';
+      return;
+    }
+    items.forEach(function(item){
+      var li = document.createElement("li");
+      li.className = "li " + (item.pnl > 0 ? "is-win" : item.pnl < 0 ? "is-loss" : "");
+
+      var main = document.createElement("div");
+      main.className = "li-main";
+
+      var top = document.createElement("div");
+      top.className = "li-top";
+      var week = document.createElement("span");
+      week.className = "li-week";
+      week.textContent = weekLabel(item.weekStart);
+      if(state.isSample){
+        var badge = document.createElement("span");
+        badge.className = "badge-sample";
+        badge.textContent = "サンプル";
+        week.appendChild(badge);
+      }
+      var pnl = document.createElement("span");
+      pnl.className = "li-pnl mono " + (item.pnl >= 0 ? "win" : "loss");
+      pnl.textContent = fmtYen(item.pnl);
+      top.appendChild(week);
+      top.appendChild(pnl);
+
+      var meta = document.createElement("div");
+      meta.className = "li-meta mono";
+      meta.textContent = "取引 " + item.trades + "件 ・ 最大DD " + fmtPct(item.dd);
+
+      main.appendChild(top);
+      main.appendChild(meta);
+
+      if(item.note){
+        var note = document.createElement("div");
+        note.className = "li-note";
+        note.textContent = item.note;
+        main.appendChild(note);
+      }
+
+      var actions = document.createElement("div");
+      actions.className = "li-actions";
+      var editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.textContent = "編集";
+      editBtn.addEventListener("click", function(){ startEdit(item.id); });
+      var delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "danger";
+      delBtn.textContent = "削除";
+      delBtn.addEventListener("click", function(){ deleteItem(item.id); });
+      actions.appendChild(editBtn);
+      actions.appendChild(delBtn);
+
+      li.appendChild(main);
+      li.appendChild(actions);
+      recordList.appendChild(li);
+    });
+  }
+
+  function render(){
+    sampleBanner.hidden = !state.isSample;
+    var counts = renderHero();
+    renderChart();
+    renderDonut(counts);
+    renderList();
+  }
+
+  function openModal(title){
+    modalTitle.textContent = title;
+    modalOverlay.hidden = false;
+  }
+  function closeModal(){
+    modalOverlay.hidden = true;
+    resetForm();
+  }
+
+  function startEdit(id){
+    var item = state.items.find(function(i){ return i.id === id; });
+    if(!item) return;
+    editingId = id;
+    fWeekStart.value = item.weekStart;
+    fTrades.value = item.trades;
+    fPnl.value = item.pnl;
+    fDd.value = item.dd;
+    fNote.value = item.note || "";
+    saveBtn.textContent = "更新する";
+    openModal("記録を編集");
+  }
+
+  function resetForm(){
+    editingId = null;
+    recordForm.reset();
+    fWeekStart.value = isoDate(mondayOf(new Date()));
+    saveBtn.textContent = "記録を保存";
+  }
+
+  function deleteItem(id){
+    if(!window.confirm("この記録を削除しますか？")) return;
+    state.items = state.items.filter(function(i){ return i.id !== id; });
+    saveState(state);
+    render();
+  }
+
+  fabAdd.addEventListener("click", function(){
+    resetForm();
+    openModal("記録を追加");
+  });
+  modalClose.addEventListener("click", closeModal);
+  cancelEditBtn.addEventListener("click", closeModal);
+  modalOverlay.addEventListener("click", function(e){
+    if(e.target === modalOverlay) closeModal();
+  });
+
+  recordForm.addEventListener("submit", function(e){
+    e.preventDefault();
+    var entry = {
+      id: editingId || ("r" + Date.now() + Math.floor(Math.random()*1000)),
+      weekStart: fWeekStart.value,
+      trades: Math.max(0, parseInt(fTrades.value, 10) || 0),
+      pnl: parseFloat(fPnl.value) || 0,
+      dd: Math.min(100, Math.max(0, parseFloat(fDd.value) || 0)),
+      note: fNote.value.trim()
+    };
+    if(!entry.weekStart) return;
+
+    if(state.isSample){
+      state.items = [];
+      state.isSample = false;
+    }
+
+    if(editingId){
+      state.items = state.items.map(function(i){ return i.id === editingId ? entry : i; });
+    } else {
+      state.items.push(entry);
+    }
+    saveState(state);
+    closeModal();
+    render();
+  });
+
+  resetForm();
+  render();
+
+  var tabs = document.querySelectorAll(".tab");
+  var panels = {
+    record: document.getElementById("panel-record"),
+    lot: document.getElementById("panel-lot")
+  };
+  tabs.forEach(function(tab){
+    tab.addEventListener("click", function(){
+      tabs.forEach(function(t){
+        t.classList.remove("active");
+        t.setAttribute("aria-selected", "false");
+      });
+      tab.classList.add("active");
+      tab.setAttribute("aria-selected", "true");
+      Object.keys(panels).forEach(function(key){
+        panels[key].hidden = (key !== tab.dataset.tab);
+      });
+      fabAdd.hidden = (tab.dataset.tab !== "record");
+    });
+  });
+
+  var lBacktestCapital = document.getElementById("lBacktestCapital");
+  var lBacktestLot = document.getElementById("lBacktestLot");
+  var lBacktestDd = document.getElementById("lBacktestDd");
+  var lMyCapital = document.getElementById("lMyCapital");
+  var lotBig = document.getElementById("lotBig");
+  var lotRatio = document.getElementById("lotRatio");
+  var lotWarn = document.getElementById("lotWarn");
+
+  lBacktestCapital.value = 500000;
+  lBacktestLot.value = 1.0;
+  lBacktestDd.value = 30;
+  lMyCapital.value = 100000;
+
+  function floorTo(n, step){
+    return Math.floor((n + 1e-9) / step) * step;
+  }
+
+  function computeLot(){
+    var bc = parseFloat(lBacktestCapital.value);
+    var bl = parseFloat(lBacktestLot.value);
+    var bd = parseFloat(lBacktestDd.value);
+    var mc = parseFloat(lMyCapital.value);
+
+    if(!(bc > 0) || !(bl > 0) || !(mc > 0)){
+      lotBig.textContent = "—";
+      lotRatio.textContent = "";
+      lotWarn.hidden = true;
+      return;
+    }
+
+    var ratio = mc / bc;
+    var rawLot = bl * ratio;
+    var rounded = Math.max(0, floorTo(rawLot, 0.01));
+
+    lotBig.textContent = rounded.toFixed(2);
+    var ratioText = "資金比率: ×" + ratio.toFixed(2) + "（検証時の" + Math.round(ratio*100) + "%）";
+    if(bd > 0){
+      ratioText += " ／ 目安DD: 約" + bd.toFixed(1) + "%";
+    }
+    lotRatio.textContent = ratioText;
+
+    if(rounded < 0.01){
+      lotWarn.hidden = false;
+      lotWarn.textContent = "この比率だと最小ロット（0.01）を下回ります。最小ロットから始めるか、資金に応じて検討してください。";
+    } else {
+      lotWarn.hidden = true;
+    }
+  }
+
+  [lBacktestCapital, lBacktestLot, lBacktestDd, lMyCapital].forEach(function(el){
+    el.addEventListener("input", computeLot);
+  });
+  computeLot();
+
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("service-worker.js").catch(function(){});
+    });
+  }
+
+})();
+</script>
+</body>
+</html>
